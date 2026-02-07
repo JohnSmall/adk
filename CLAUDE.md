@@ -2,39 +2,100 @@
 
 ## Project Overview
 
-Elixir/OTP port of Google's Agent Development Kit (ADK). This is the `adk` hex package providing agent orchestration, session management, tool use, and A2A protocol support.
+Elixir/OTP port of Google's Agent Development Kit (ADK). Standalone `adk` hex package providing agent orchestration, session management, tool use, and LLM abstraction. Transport-agnostic — no HTTP/Plug dependencies.
+
+**Note**: The A2A (Agent-to-Agent) protocol is a separate package at `/workspace/a2a_ex/` (github.com/JohnSmall/a2a_ex). It depends on this ADK package and adds HTTP server/client layers.
 
 ## Quick Start
 
 ```bash
 cd /workspace/adk
 mix deps.get
-mix test          # 75 tests
+mix test          # 168 tests
 mix credo         # Static analysis
 mix dialyzer      # Type checking
 ```
 
 ## Key Documentation
 
-- **PRD**: `docs/prd.md`
-- **Implementation Plan**: `docs/implementation-plan.md` (phase checklist)
-- **Onboarding**: `docs/onboarding.md` (full context for new agents)
-- **Project Memory**: `/home/dev/.claude/projects/-workspace-agent-hub/memory/MEMORY.md`
+- **PRD**: `docs/prd.md` — Requirements, design decisions, component status
+- **Implementation Plan**: `docs/implementation-plan.md` — Phase checklist with detailed tasks
+- **Onboarding**: `docs/onboarding.md` — Full context for new agents (architecture, patterns, gotchas)
 
 ## Reference Codebases
 
 - **Go ADK (PRIMARY)**: `/workspace/adk-go/` — Read corresponding Go file before implementing any module
 - **Python ADK**: `/workspace/google-adk-venv/lib/python3.13/site-packages/google/adk/`
 - **A2A Go SDK**: `/workspace/a2a-go/`
+- **A2A Samples**: `/workspace/a2a-samples/`
 
 ## Current Status
 
-Phase 1 (Foundation) complete. Next: Phase 2 (Runner, Tools, LLM Agent).
+**Phases 1-3 COMPLETE (168 tests, credo clean, dialyzer clean).**
+
+| Phase | Status | Tests |
+|-------|--------|-------|
+| Phase 1: Foundation (Types, Event, Session, Agent) | Done | 75 |
+| Phase 2: Runner + Tools + LLM Agent (Model, Flow) | Done | +63 = 138 |
+| Phase 3: Orchestration (Loop/Sequential/Parallel, Transfer) | Done | +30 = 168 |
+| Phase 4: Services (Memory, Artifacts, DB Sessions, Plugins) | Next | — |
+
+## Module Map
+
+### Core (Phase 1)
+- `ADK.Types` — Content, Part, FunctionCall, FunctionResponse, Blob
+- `ADK.Event` + `ADK.Event.Actions` — Event struct with side-effects
+- `ADK.Session` + `ADK.Session.State` — Session struct + prefix-based state scoping
+- `ADK.Session.Service` + `ADK.Session.InMemory` — Session storage behaviour + ETS impl
+- `ADK.RunConfig` — Runtime configuration
+- `ADK.Agent` — Agent behaviour (name, description, run, sub_agents)
+- `ADK.Agent.InvocationContext` + `ADK.Agent.CallbackContext` — Execution contexts
+- `ADK.Agent.Config` + `ADK.Agent.CustomAgent` — Custom agents
+- `ADK.Agent.Tree` — Agent tree utilities (find, parent_map, validate)
+
+### Runner + Tools + LLM (Phase 2)
+- `ADK.Model` + `ADK.Model.LlmRequest` + `ADK.Model.LlmResponse` — LLM abstraction
+- `ADK.Model.Mock` / `ADK.Model.Gemini` / `ADK.Model.Claude` — Providers
+- `ADK.Model.Registry` — Model name → provider resolution
+- `ADK.Tool` + `ADK.Tool.Context` + `ADK.Tool.FunctionTool` — Tool system
+- `ADK.Flow` — Stream.resource/3 state machine (max 25 iterations)
+- `ADK.Flow.Processors.*` — Basic, ToolProcessor, Instructions, AgentTransfer, Contents
+- `ADK.Agent.LlmAgent` — LLM-powered agent with model + tools + callbacks
+- `ADK.Runner` — Session lifecycle, event persistence, agent resolution
+
+### Orchestration (Phase 3)
+- `ADK.Agent.LoopAgent` — Iterate sub-agents with max_iterations, escalation exit
+- `ADK.Agent.SequentialAgent` — LoopAgent wrapper (max_iterations=1)
+- `ADK.Agent.ParallelAgent` — Task.async + Task.await_many, branch isolation
+- `ADK.Tool.TransferToAgent` — Tool signaling agent transfer
+- `ADK.Flow.Processors.AgentTransfer` — Injects transfer tool + target instructions
 
 ## Critical Rules
 
 1. **Compile order**: Define nested/referenced modules BEFORE parent modules in the same file (e.g., `Event.Actions` before `Event`)
 2. **Avoid MapSet with dialyzer**: Use `%{key => true}` maps + `Map.has_key?/2` instead
 3. **Credo nesting**: Max depth 2 — extract inner logic into helper functions
-4. **All tests async**: Use `async: true` unless shared state requires otherwise
-5. **Verify all changes**: Always run `mix test && mix credo && mix dialyzer`
+4. **Mock model**: Use `Mock.new(responses: [...])` NOT bare `%Mock{}` — needs Agent process for state
+5. **Behaviour dispatch**: `ADK.Agent` has NO module functions — call `agent.__struct__.run(agent, ctx)` or the implementing module directly
+6. **Test module names**: Use unique names to avoid cross-file collisions (e.g., `LoopAgentTest.Helper` not `FakeAgent`)
+7. **All tests async**: Use `async: true` unless shared state requires otherwise
+8. **Verify all changes**: Always run `mix test && mix credo && mix dialyzer`
+
+## Architecture Quick Reference
+
+```
+User Message -> Runner -> Agent -> Flow -> LLM
+                  |          |        |       |
+                  |          |     [tool calls loop]
+                  |          |     [agent transfer]
+                  |          |        |
+               [commits events + state to Session]
+                  |
+               [yields Events to application]
+```
+
+### Callback Pattern
+All callbacks return `{value | nil, updated_context}`. Nil = continue, non-nil = short-circuit.
+
+### State Prefixes
+- `(none)` = session-local, `app:` = cross-session, `user:` = cross-user-session, `temp:` = invocation-only
