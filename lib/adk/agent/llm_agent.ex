@@ -12,6 +12,7 @@ defmodule ADK.Agent.LlmAgent do
   alias ADK.Event
   alias ADK.Flow
   alias ADK.Flow.Processors.{AgentTransfer, Basic, Contents, Instructions, ToolProcessor}
+  alias ADK.Plugin.Manager, as: PluginManager
   alias ADK.Types.Content
 
   @type t :: %__MODULE__{
@@ -26,6 +27,7 @@ defmodule ADK.Agent.LlmAgent do
           output_schema: map() | nil,
           generate_content_config: map(),
           tools: [struct()],
+          toolsets: [struct()],
           sub_agents: [struct()],
           include_contents: :default | :none,
           disallow_transfer_to_parent: boolean(),
@@ -53,6 +55,7 @@ defmodule ADK.Agent.LlmAgent do
     global_instruction: "",
     generate_content_config: %{},
     tools: [],
+    toolsets: [],
     sub_agents: [],
     include_contents: :default,
     disallow_transfer_to_parent: false,
@@ -89,30 +92,50 @@ defmodule ADK.Agent.LlmAgent do
 
   defp next({:before, agent, ctx}) do
     cb_ctx = CallbackContext.new(ctx)
+    pm = ctx.plugin_manager
 
-    case run_callbacks(agent.before_agent_callbacks, cb_ctx) do
-      {:short_circuit, content, updated_cb_ctx} ->
+    # Plugin before_agent runs first
+    case PluginManager.run_before_agent(pm, cb_ctx) do
+      {%Content{} = content, updated_cb_ctx} ->
         event = make_callback_event(ctx, agent, content, updated_cb_ctx)
         {[event], :done}
 
-      {:continue, _cb_ctx} ->
-        flow = build_flow(agent)
-        events = flow |> Flow.run(ctx) |> Enum.to_list()
-        events = maybe_save_output(events, agent)
-        {events, {:after, agent, ctx}}
+      {nil, plugin_cb_ctx} ->
+        # Then agent before_agent callbacks
+        case run_callbacks(agent.before_agent_callbacks, plugin_cb_ctx) do
+          {:short_circuit, content, updated_cb_ctx} ->
+            event = make_callback_event(ctx, agent, content, updated_cb_ctx)
+            {[event], :done}
+
+          {:continue, _cb_ctx} ->
+            flow = build_flow(agent)
+            events = flow |> Flow.run(ctx) |> Enum.to_list()
+            events = maybe_save_output(events, agent)
+            {events, {:after, agent, ctx}}
+        end
     end
   end
 
   defp next({:after, agent, ctx}) do
     cb_ctx = CallbackContext.new(ctx)
+    pm = ctx.plugin_manager
 
-    case run_callbacks(agent.after_agent_callbacks, cb_ctx) do
-      {:short_circuit, content, updated_cb_ctx} ->
+    # Plugin after_agent runs first
+    case PluginManager.run_after_agent(pm, cb_ctx) do
+      {%Content{} = content, updated_cb_ctx} ->
         event = make_callback_event(ctx, agent, content, updated_cb_ctx)
         {[event], :done}
 
-      {:continue, _cb_ctx} ->
-        {[], :done}
+      {nil, plugin_cb_ctx} ->
+        # Then agent after_agent callbacks
+        case run_callbacks(agent.after_agent_callbacks, plugin_cb_ctx) do
+          {:short_circuit, content, updated_cb_ctx} ->
+            event = make_callback_event(ctx, agent, content, updated_cb_ctx)
+            {[event], :done}
+
+          {:continue, _cb_ctx} ->
+            {[], :done}
+        end
     end
   end
 
@@ -120,6 +143,7 @@ defmodule ADK.Agent.LlmAgent do
     %Flow{
       model: agent.model,
       tools: agent.tools,
+      toolsets: agent.toolsets,
       request_processors: [
         &Basic.process/3,
         &ToolProcessor.process/3,

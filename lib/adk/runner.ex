@@ -9,6 +9,8 @@ defmodule ADK.Runner do
   alias ADK.Agent.InvocationContext
   alias ADK.Agent.Tree
   alias ADK.Event
+  alias ADK.Plugin
+  alias ADK.Plugin.Manager, as: PluginManager
   alias ADK.Session
   alias ADK.Types
   alias ADK.Types.Content
@@ -19,7 +21,9 @@ defmodule ADK.Runner do
           session_service: GenServer.server(),
           artifact_service: GenServer.server() | nil,
           memory_service: GenServer.server() | nil,
-          parent_map: %{String.t() => struct()}
+          parent_map: %{String.t() => struct()},
+          plugins: [Plugin.t()],
+          session_module: module()
         }
 
   @enforce_keys [:app_name, :root_agent, :session_service]
@@ -29,7 +33,9 @@ defmodule ADK.Runner do
     :session_service,
     :artifact_service,
     :memory_service,
-    parent_map: %{}
+    parent_map: %{},
+    plugins: [],
+    session_module: ADK.Session.InMemory
   ]
 
   @doc """
@@ -38,26 +44,29 @@ defmodule ADK.Runner do
   @spec new(keyword()) :: {:ok, t()} | {:error, String.t()}
   def new(opts) do
     root_agent = Keyword.fetch!(opts, :root_agent)
+    plugins = Keyword.get(opts, :plugins, [])
 
-    case Tree.validate_unique_names(root_agent) do
-      {:ok, _names} ->
-        parent_map = Tree.build_parent_map(root_agent)
+    with {:ok, _names} <- Tree.validate_unique_names(root_agent),
+         {:ok, _manager} <- validate_plugins(plugins) do
+      parent_map = Tree.build_parent_map(root_agent)
 
-        runner = %__MODULE__{
-          app_name: Keyword.fetch!(opts, :app_name),
-          root_agent: root_agent,
-          session_service: Keyword.fetch!(opts, :session_service),
-          artifact_service: Keyword.get(opts, :artifact_service),
-          memory_service: Keyword.get(opts, :memory_service),
-          parent_map: parent_map
-        }
+      runner = %__MODULE__{
+        app_name: Keyword.fetch!(opts, :app_name),
+        root_agent: root_agent,
+        session_service: Keyword.fetch!(opts, :session_service),
+        artifact_service: Keyword.get(opts, :artifact_service),
+        memory_service: Keyword.get(opts, :memory_service),
+        parent_map: parent_map,
+        plugins: plugins,
+        session_module: Keyword.get(opts, :session_module, ADK.Session.InMemory)
+      }
 
-        {:ok, runner}
-
-      {:error, _} = err ->
-        err
+      {:ok, runner}
     end
   end
+
+  defp validate_plugins([]), do: {:ok, nil}
+  defp validate_plugins(plugins), do: PluginManager.new(plugins)
 
   @doc """
   Runs an agent with the given user message, returning a stream of events.
@@ -79,6 +88,8 @@ defmodule ADK.Runner do
     run_config = Keyword.get(opts, :run_config, %ADK.RunConfig{})
     invocation_id = UUID.uuid4()
 
+    plugin_manager = build_plugin_manager(runner.plugins)
+
     ctx = %InvocationContext{
       agent: agent,
       session: session,
@@ -89,8 +100,14 @@ defmodule ADK.Runner do
       artifact_service: runner.artifact_service,
       memory_service: runner.memory_service,
       parent_map: runner.parent_map,
-      root_agent: runner.root_agent
+      root_agent: runner.root_agent,
+      plugin_manager: plugin_manager
     }
+
+    # Plugin: on_user_message — may modify user content
+    {modified_content, ctx} = PluginManager.run_on_user_message(plugin_manager, ctx, user_content)
+    user_content = modified_content || user_content
+    ctx = %{ctx | user_content: user_content}
 
     # Create user message event and commit it
     user_event =
@@ -104,41 +121,73 @@ defmodule ADK.Runner do
     updated_session = append_event_to_session(session, user_event)
     ctx = %{ctx | session: updated_session}
 
-    # Get the agent's event stream
-    agent_stream = agent.__struct__.run(agent, ctx)
-    events = Enum.to_list(agent_stream)
+    # Plugin: before_run — may short-circuit entire run
+    case PluginManager.run_before_run(plugin_manager, ctx) do
+      {%Content{} = short_circuit_content, updated_ctx} ->
+        event = build_short_circuit_event(updated_ctx, agent, short_circuit_content)
+        PluginManager.run_after_run(plugin_manager, updated_ctx)
+        {:events, [event], runner, updated_session}
 
-    {:events, events, runner, updated_session}
+      {nil, updated_ctx} ->
+        agent_stream = agent.__struct__.run(agent, updated_ctx)
+        events = Enum.to_list(agent_stream)
+        PluginManager.run_after_run(plugin_manager, updated_ctx)
+        {:events, events, runner, updated_session, plugin_manager, updated_ctx}
+    end
   end
 
   defp run_next({:events, [], _runner, _session}), do: {:halt, :done}
+  defp run_next({:events, [], _runner, _session, _pm, _ctx}), do: {:halt, :done}
 
   defp run_next({:events, [event | rest], runner, session}) do
-    # Commit non-partial events
+    # Legacy path (short-circuit, no plugin manager for on_event)
     unless event.partial do
       commit_event(runner, session, event)
     end
 
-    updated_session =
-      if event.partial do
-        session
-      else
-        append_event_to_session(session, event)
-      end
-
+    updated_session = if event.partial, do: session, else: append_event_to_session(session, event)
     {[event], {:events, rest, runner, updated_session}}
+  end
+
+  defp run_next({:events, [event | rest], runner, session, plugin_manager, ctx}) do
+    # Plugin: on_event — may modify event
+    {modified_event, _updated_ctx} = PluginManager.run_on_event(plugin_manager, ctx, event)
+    event = modified_event || event
+
+    unless event.partial do
+      commit_event(runner, session, event)
+    end
+
+    updated_session = if event.partial, do: session, else: append_event_to_session(session, event)
+    {[event], {:events, rest, runner, updated_session, plugin_manager, ctx}}
+  end
+
+  defp build_short_circuit_event(ctx, agent, content) do
+    Event.new(
+      invocation_id: ctx.invocation_id,
+      author: agent.__struct__.name(agent),
+      content: content
+    )
+  end
+
+  defp build_plugin_manager([]), do: nil
+
+  defp build_plugin_manager(plugins) do
+    {:ok, manager} = PluginManager.new(plugins)
+    manager
   end
 
   defp get_or_create_session(runner, user_id, session_id) do
     svc = runner.session_service
+    mod = runner.session_module
 
-    case ADK.Session.InMemory.get(svc, app_name: runner.app_name, user_id: user_id, session_id: session_id) do
+    case mod.get(svc, app_name: runner.app_name, user_id: user_id, session_id: session_id) do
       {:ok, session} ->
         session
 
       {:error, :not_found} ->
         {:ok, session} =
-          ADK.Session.InMemory.create(svc,
+          mod.create(svc,
             app_name: runner.app_name,
             user_id: user_id,
             session_id: session_id
@@ -215,7 +264,7 @@ defmodule ADK.Runner do
   end
 
   defp commit_event(runner, session, event) do
-    ADK.Session.InMemory.append_event(runner.session_service, session, event)
+    runner.session_module.append_event(runner.session_service, session, event)
   end
 
   defp append_event_to_session(session, event) do

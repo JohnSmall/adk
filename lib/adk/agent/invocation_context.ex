@@ -18,7 +18,8 @@ defmodule ADK.Agent.InvocationContext do
           artifact_service: GenServer.server() | nil,
           memory_service: GenServer.server() | nil,
           parent_map: %{String.t() => struct()},
-          root_agent: struct() | nil
+          root_agent: struct() | nil,
+          plugin_manager: ADK.Plugin.Manager.t() | nil
         }
 
   defstruct [
@@ -31,6 +32,7 @@ defmodule ADK.Agent.InvocationContext do
     :artifact_service,
     :memory_service,
     :root_agent,
+    :plugin_manager,
     run_config: %ADK.RunConfig{},
     ended: false,
     parent_map: %{}

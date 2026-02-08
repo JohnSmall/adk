@@ -2,7 +2,7 @@ defmodule ADK.Flow do
   @moduledoc """
   Core execution engine for LLM agents.
 
-  Implements the request→model→response→tool loop. Each iteration:
+  Implements the request->model->response->tool loop. Each iteration:
   1. Build an LlmRequest via request processors
   2. Run before_model callbacks (may short-circuit)
   3. Call the model's generate_content
@@ -17,6 +17,7 @@ defmodule ADK.Flow do
   alias ADK.Event.Actions
   alias ADK.Model
   alias ADK.Model.{LlmRequest, LlmResponse}
+  alias ADK.Plugin.Manager, as: PluginManager
   alias ADK.Tool
   alias ADK.Tool.Context, as: ToolContext
   alias ADK.Types
@@ -37,6 +38,7 @@ defmodule ADK.Flow do
   @type t :: %__MODULE__{
           model: struct() | nil,
           tools: [struct()],
+          toolsets: [struct()],
           request_processors: [request_processor()],
           response_processors: [term()],
           before_model_callbacks: [before_model_callback()],
@@ -50,6 +52,7 @@ defmodule ADK.Flow do
   defstruct [
     :model,
     tools: [],
+    toolsets: [],
     request_processors: [],
     response_processors: [],
     before_model_callbacks: [],
@@ -115,7 +118,8 @@ defmodule ADK.Flow do
   end
 
   defp run_one_step(flow, ctx) do
-    flow_state = %{tools: flow.tools}
+    resolved_tools = resolve_toolsets(flow.toolsets, ctx)
+    flow_state = %{tools: flow.tools ++ resolved_tools}
 
     with {:ok, request} <- build_request(flow, ctx, flow_state),
          {:ok, response, cb_ctx} <- call_model_with_callbacks(flow, ctx, request),
@@ -138,6 +142,17 @@ defmodule ADK.Flow do
     end
   end
 
+  defp resolve_toolsets([], _ctx), do: []
+
+  defp resolve_toolsets(toolsets, ctx) do
+    Enum.flat_map(toolsets, fn ts ->
+      case ts.__struct__.tools(ts, ctx) do
+        {:ok, tools} -> tools
+        {:error, _reason} -> []
+      end
+    end)
+  end
+
   defp build_request(flow, ctx, flow_state) do
     request = %LlmRequest{model: model_name(flow)}
 
@@ -151,28 +166,50 @@ defmodule ADK.Flow do
 
   defp call_model_with_callbacks(flow, ctx, request) do
     cb_ctx = CallbackContext.new(ctx)
+    pm = ctx.plugin_manager
 
-    case run_before_model_callbacks(flow.before_model_callbacks, cb_ctx, request) do
-      {:short_circuit, response, updated_cb_ctx} ->
+    # Plugin before_model runs first
+    case PluginManager.run_before_model(pm, cb_ctx, request) do
+      {%LlmResponse{} = response, updated_cb_ctx} ->
         {:ok, response, updated_cb_ctx}
 
-      {:continue, updated_cb_ctx} ->
-        stream? = ctx.run_config.streaming_mode != :none
+      {nil, plugin_cb_ctx} ->
+        # Then agent before_model callbacks
+        case run_before_model_callbacks(flow.before_model_callbacks, plugin_cb_ctx, request) do
+          {:short_circuit, response, updated_cb_ctx} ->
+            {:ok, response, updated_cb_ctx}
 
-        llm_meta = %{
-          model_name: model_name(flow),
-          invocation_id: ctx.invocation_id,
-          session_id: if(ctx.session, do: ctx.session.id, else: nil)
-        }
+          {:continue, updated_cb_ctx} ->
+            call_and_finalize_model(flow, ctx, request, updated_cb_ctx)
+        end
+    end
+  end
 
-        responses =
-          ADK.Telemetry.span_llm_call(llm_meta, fn ->
-            flow.model |> Model.generate_content(request, stream?) |> Enum.to_list()
-          end)
+  defp call_and_finalize_model(flow, ctx, request, cb_ctx) do
+    pm = ctx.plugin_manager
+    stream? = ctx.run_config.streaming_mode != :none
 
-        final_response = find_final_response(responses)
+    llm_meta = %{
+      model_name: model_name(flow),
+      invocation_id: ctx.invocation_id,
+      session_id: if(ctx.session, do: ctx.session.id, else: nil)
+    }
 
-        case run_after_model_callbacks(flow.after_model_callbacks, updated_cb_ctx, final_response) do
+    responses =
+      ADK.Telemetry.span_llm_call(llm_meta, fn ->
+        flow.model |> Model.generate_content(request, stream?) |> Enum.to_list()
+      end)
+
+    final_response = find_final_response(responses)
+
+    # Plugin after_model runs first
+    case PluginManager.run_after_model(pm, cb_ctx, final_response) do
+      {%LlmResponse{} = replaced, updated_cb_ctx} ->
+        {:ok, replaced, updated_cb_ctx}
+
+      {nil, plugin_cb_ctx} ->
+        # Then agent after_model callbacks
+        case run_after_model_callbacks(flow.after_model_callbacks, plugin_cb_ctx, final_response) do
           {:replaced, replaced_response, after_cb_ctx} ->
             {:ok, replaced_response, after_cb_ctx}
 
@@ -251,7 +288,7 @@ defmodule ADK.Flow do
 
     results =
       Enum.map(function_calls, fn fc ->
-        call_tool(flow, cb_ctx, request, fc)
+        call_tool(flow, ctx, cb_ctx, request, fc)
       end)
 
     parts =
@@ -276,7 +313,7 @@ defmodule ADK.Flow do
     {:ok, event}
   end
 
-  defp call_tool(flow, cb_ctx, request, %FunctionCall{} = fc) do
+  defp call_tool(flow, ctx, cb_ctx, request, %FunctionCall{} = fc) do
     tool_ctx = ToolContext.new(cb_ctx, fc.id)
     tool = Map.get(request.tools, fc.name)
 
@@ -291,21 +328,31 @@ defmodule ADK.Flow do
 
       {tool_ctx, error_part}
     else
-      do_call_tool(flow, tool_ctx, tool, fc)
+      do_call_tool(flow, ctx, tool_ctx, tool, fc)
     end
   end
 
-  defp do_call_tool(flow, tool_ctx, tool, fc) do
-    case run_before_tool_callbacks(flow.before_tool_callbacks, tool_ctx, tool, fc.args) do
-      {:short_circuit, result, updated_ctx} ->
+  defp do_call_tool(flow, ctx, tool_ctx, tool, fc) do
+    pm = ctx.plugin_manager
+
+    # Plugin before_tool runs first
+    case PluginManager.run_before_tool(pm, tool_ctx, tool, fc.args) do
+      {%{} = result, updated_ctx} when not is_struct(result) ->
         {updated_ctx, make_response_part(fc, result)}
 
-      {:continue, updated_ctx} ->
-        execute_and_finalize(flow, updated_ctx, tool, fc)
+      {nil, plugin_ctx} ->
+        # Then agent before_tool callbacks
+        case run_before_tool_callbacks(flow.before_tool_callbacks, plugin_ctx, tool, fc.args) do
+          {:short_circuit, result, updated_ctx} ->
+            {updated_ctx, make_response_part(fc, result)}
+
+          {:continue, updated_ctx} ->
+            execute_and_finalize(flow, ctx, updated_ctx, tool, fc)
+        end
     end
   end
 
-  defp execute_and_finalize(flow, tool_ctx, tool, fc) do
+  defp execute_and_finalize(flow, ctx, tool_ctx, tool, fc) do
     tool_meta = %{
       tool_name: Tool.name(tool),
       function_call_id: fc.id
@@ -318,22 +365,31 @@ defmodule ADK.Flow do
 
     case result do
       {:ok, result} ->
-        finalize_tool_success(flow, tool_ctx, tool, fc, result)
+        finalize_tool_success(flow, ctx, tool_ctx, tool, fc, result)
 
       {:error, reason} ->
-        finalize_tool_error(flow, tool_ctx, tool, fc, reason)
+        finalize_tool_error(flow, ctx, tool_ctx, tool, fc, reason)
     end
   end
 
-  defp finalize_tool_success(flow, tool_ctx, tool, fc, result) do
+  defp finalize_tool_success(flow, ctx, tool_ctx, tool, fc, result) do
+    pm = ctx.plugin_manager
     tool_ctx = maybe_set_transfer(tool_ctx, result)
 
-    case run_after_tool_callbacks(flow.after_tool_callbacks, tool_ctx, tool, fc.args, result) do
-      {:replaced, replaced_result, after_ctx} ->
-        {after_ctx, make_response_part(fc, replaced_result)}
+    # Plugin after_tool runs first
+    case PluginManager.run_after_tool(pm, tool_ctx, tool, fc.args, result) do
+      {%{} = replaced, updated_ctx} when not is_struct(replaced) ->
+        {updated_ctx, make_response_part(fc, replaced)}
 
-      {:continue, after_ctx} ->
-        {after_ctx, make_response_part(fc, result)}
+      {nil, plugin_ctx} ->
+        # Then agent after_tool callbacks
+        case run_after_tool_callbacks(flow.after_tool_callbacks, plugin_ctx, tool, fc.args, result) do
+          {:replaced, replaced_result, after_ctx} ->
+            {after_ctx, make_response_part(fc, replaced_result)}
+
+          {:continue, after_ctx} ->
+            {after_ctx, make_response_part(fc, result)}
+        end
     end
   end
 
@@ -343,15 +399,24 @@ defmodule ADK.Flow do
 
   defp maybe_set_transfer(tool_ctx, _), do: tool_ctx
 
-  defp finalize_tool_error(flow, tool_ctx, tool, fc, reason) do
+  defp finalize_tool_error(flow, ctx, tool_ctx, tool, fc, reason) do
+    pm = ctx.plugin_manager
     error_result = %{"error" => to_string(reason)}
 
-    case run_tool_error_callbacks(flow.on_tool_error_callbacks, tool_ctx, tool, error_result) do
-      {:recovered, recovered_result, err_ctx} ->
-        {err_ctx, make_response_part(fc, recovered_result)}
+    # Plugin on_tool_error runs first
+    case PluginManager.run_on_tool_error(pm, tool_ctx, tool, error_result) do
+      {%{} = recovered, updated_ctx} when not is_struct(recovered) ->
+        {updated_ctx, make_response_part(fc, recovered)}
 
-      {:continue, err_ctx} ->
-        {err_ctx, make_response_part(fc, error_result)}
+      {nil, plugin_ctx} ->
+        # Then agent on_tool_error callbacks
+        case run_tool_error_callbacks(flow.on_tool_error_callbacks, plugin_ctx, tool, error_result) do
+          {:recovered, recovered_result, err_ctx} ->
+            {err_ctx, make_response_part(fc, recovered_result)}
+
+          {:continue, err_ctx} ->
+            {err_ctx, make_response_part(fc, error_result)}
+        end
     end
   end
 
