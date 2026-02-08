@@ -13,8 +13,8 @@ defmodule ADK.Telemetry do
 
   ## :telemetry Events
 
-  - `[:adk, :llm, :start | :stop | :exception]`
-  - `[:adk, :tool, :start | :stop | :exception]`
+  - `[:adk_ex, :llm, :start | :stop | :exception]`
+  - `[:adk_ex, :tool, :start | :stop | :exception]`
   """
 
   require OpenTelemetry.Tracer, as: Tracer
@@ -29,7 +29,7 @@ defmodule ADK.Telemetry do
     start_time = System.monotonic_time()
     system_time = System.system_time()
 
-    :telemetry.execute([:adk, :llm, :start], %{system_time: system_time}, metadata)
+    :telemetry.execute([:adk_ex, :llm, :start], %{system_time: system_time}, metadata)
 
     attributes = llm_attributes(metadata)
 
@@ -37,13 +37,13 @@ defmodule ADK.Telemetry do
       try do
         result = fun.()
         duration = System.monotonic_time() - start_time
-        :telemetry.execute([:adk, :llm, :stop], %{duration: duration}, metadata)
+        :telemetry.execute([:adk_ex, :llm, :stop], %{duration: duration}, metadata)
         result
       rescue
         e ->
           duration = System.monotonic_time() - start_time
           error_meta = Map.put(metadata, :error, Exception.message(e))
-          :telemetry.execute([:adk, :llm, :exception], %{duration: duration}, error_meta)
+          :telemetry.execute([:adk_ex, :llm, :exception], %{duration: duration}, error_meta)
 
           Tracer.set_status(:error, Exception.message(e))
           reraise e, __STACKTRACE__
@@ -62,7 +62,7 @@ defmodule ADK.Telemetry do
     system_time = System.system_time()
     tool_name = Map.get(metadata, :tool_name, "unknown")
 
-    :telemetry.execute([:adk, :tool, :start], %{system_time: system_time}, metadata)
+    :telemetry.execute([:adk_ex, :tool, :start], %{system_time: system_time}, metadata)
 
     attributes = tool_attributes(metadata)
 
@@ -70,13 +70,13 @@ defmodule ADK.Telemetry do
       try do
         result = fun.()
         duration = System.monotonic_time() - start_time
-        :telemetry.execute([:adk, :tool, :stop], %{duration: duration}, metadata)
+        :telemetry.execute([:adk_ex, :tool, :stop], %{duration: duration}, metadata)
         result
       rescue
         e ->
           duration = System.monotonic_time() - start_time
           error_meta = Map.put(metadata, :error, Exception.message(e))
-          :telemetry.execute([:adk, :tool, :exception], %{duration: duration}, error_meta)
+          :telemetry.execute([:adk_ex, :tool, :exception], %{duration: duration}, error_meta)
 
           Tracer.set_status(:error, Exception.message(e))
           reraise e, __STACKTRACE__

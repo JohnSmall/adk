@@ -16,8 +16,8 @@ defmodule ADK.TelemetryTest do
         send(pid, {ref, event, measurements, metadata})
       end
 
-      :telemetry.attach("llm-start", [:adk, :llm, :start], handler, {ref, pid})
-      :telemetry.attach("llm-stop", [:adk, :llm, :stop], handler, {ref, pid})
+      :telemetry.attach("llm-start", [:adk_ex, :llm, :start], handler, {ref, pid})
+      :telemetry.attach("llm-stop", [:adk_ex, :llm, :stop], handler, {ref, pid})
 
       on_exit(fn ->
         :telemetry.detach("llm-start")
@@ -33,8 +33,8 @@ defmodule ADK.TelemetryTest do
 
       assert result == :llm_result
 
-      assert_receive {^ref, [:adk, :llm, :start], %{system_time: _}, %{model_name: "test-model"}}
-      assert_receive {^ref, [:adk, :llm, :stop], %{duration: d}, %{model_name: "test-model"}}
+      assert_receive {^ref, [:adk_ex, :llm, :start], %{system_time: _}, %{model_name: "test-model"}}
+      assert_receive {^ref, [:adk_ex, :llm, :stop], %{duration: d}, %{model_name: "test-model"}}
       assert is_integer(d)
     end
 
@@ -46,7 +46,7 @@ defmodule ADK.TelemetryTest do
         send(pid, {ref, event, measurements, metadata})
       end
 
-      :telemetry.attach("llm-exc", [:adk, :llm, :exception], handler, {ref, pid})
+      :telemetry.attach("llm-exc", [:adk_ex, :llm, :exception], handler, {ref, pid})
 
       on_exit(fn ->
         :telemetry.detach("llm-exc")
@@ -60,7 +60,7 @@ defmodule ADK.TelemetryTest do
         end)
       end
 
-      assert_receive {^ref, [:adk, :llm, :exception], %{duration: _}, %{error: "boom"}}
+      assert_receive {^ref, [:adk_ex, :llm, :exception], %{duration: _}, %{error: "boom"}}
     end
 
     test "tool call emits start and stop events" do
@@ -71,8 +71,8 @@ defmodule ADK.TelemetryTest do
         send(pid, {ref, event, measurements, metadata})
       end
 
-      :telemetry.attach("tool-start", [:adk, :tool, :start], handler, {ref, pid})
-      :telemetry.attach("tool-stop", [:adk, :tool, :stop], handler, {ref, pid})
+      :telemetry.attach("tool-start", [:adk_ex, :tool, :start], handler, {ref, pid})
+      :telemetry.attach("tool-stop", [:adk_ex, :tool, :stop], handler, {ref, pid})
 
       on_exit(fn ->
         :telemetry.detach("tool-start")
@@ -88,10 +88,10 @@ defmodule ADK.TelemetryTest do
 
       assert result == :tool_result
 
-      assert_receive {^ref, [:adk, :tool, :start], %{system_time: _},
+      assert_receive {^ref, [:adk_ex, :tool, :start], %{system_time: _},
                       %{tool_name: "get_weather"}}
 
-      assert_receive {^ref, [:adk, :tool, :stop], %{duration: _}, %{tool_name: "get_weather"}}
+      assert_receive {^ref, [:adk_ex, :tool, :stop], %{duration: _}, %{tool_name: "get_weather"}}
     end
   end
 
@@ -160,10 +160,10 @@ defmodule ADK.TelemetryTest do
       end
 
       events = [
-        [:adk, :llm, :start],
-        [:adk, :llm, :stop],
-        [:adk, :tool, :start],
-        [:adk, :tool, :stop]
+        [:adk_ex, :llm, :start],
+        [:adk_ex, :llm, :stop],
+        [:adk_ex, :tool, :start],
+        [:adk_ex, :tool, :stop]
       ]
 
       for {event, i} <- Enum.with_index(events) do
@@ -220,10 +220,10 @@ defmodule ADK.TelemetryTest do
         |> Enum.to_list()
 
       # We expect at least 2 LLM calls (fc_response + final_response) and 1 tool call
-      assert_receive {^ref, [:adk, :llm, :start]}
-      assert_receive {^ref, [:adk, :llm, :stop]}
-      assert_receive {^ref, [:adk, :tool, :start]}
-      assert_receive {^ref, [:adk, :tool, :stop]}
+      assert_receive {^ref, [:adk_ex, :llm, :start]}
+      assert_receive {^ref, [:adk_ex, :llm, :stop]}
+      assert_receive {^ref, [:adk_ex, :tool, :start]}
+      assert_receive {^ref, [:adk_ex, :tool, :stop]}
     end
   end
 end

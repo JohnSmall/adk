@@ -5,7 +5,7 @@
 - **Version**: 0.4.0
 - **Date**: 2026-02-08
 - **Status**: Phases 1-4 Complete, Phase 5 (Plugins, MCP, DB Sessions) Next
-- **GitHub**: github.com/JohnSmall/adk
+- **GitHub**: github.com/JohnSmall/adk_ex
 
 ---
 
@@ -13,7 +13,7 @@
 
 This project ports Google's Agent Development Kit (ADK) to Elixir/OTP. The Google ADK provides a framework for building AI agents with tools, multi-agent orchestration, session management, and callback hooks. Elixir's BEAM VM, with its native concurrency, fault tolerance, and message-passing primitives, is an ideal platform for agent systems.
 
-The Elixir ADK is a standalone Mix project (hex package: `adk`) that provides idiomatic Elixir equivalents of all core ADK components while leveraging OTP patterns where they naturally fit.
+The Elixir ADK is a standalone Mix project (hex package: `adk_ex`) that provides idiomatic Elixir equivalents of all core ADK components while leveraging OTP patterns where they naturally fit.
 
 **Note**: The A2A (Agent-to-Agent) protocol is implemented as a separate package, `a2a_ex`, at `/workspace/a2a_ex/`. It depends on this ADK package and adds HTTP server/client layers for agent interoperability.
 

@@ -2,14 +2,14 @@
 
 ## Project Overview
 
-Elixir/OTP port of Google's Agent Development Kit (ADK). Standalone `adk` hex package providing agent orchestration, session management, tool use, and LLM abstraction. Transport-agnostic — no HTTP/Plug dependencies.
+Elixir/OTP port of Google's Agent Development Kit (ADK). Standalone `adk_ex` hex package providing agent orchestration, session management, tool use, and LLM abstraction. Transport-agnostic — no HTTP/Plug dependencies.
 
 **Note**: The A2A (Agent-to-Agent) protocol is a separate package at `/workspace/a2a_ex/` (github.com/JohnSmall/a2a_ex). It depends on this ADK package and adds HTTP server/client layers.
 
 ## Quick Start
 
 ```bash
-cd /workspace/adk
+cd /workspace/adk_ex
 mix deps.get
 mix test          # 217 tests
 mix credo         # Static analysis

@@ -18,7 +18,7 @@ Google provides the ADK in Python (reference), TypeScript, Go, and Java. We are 
 
 ## 2. Current Status
 
-**Phases 1-4 are COMPLETE.** The project lives at `/workspace/adk/` (github.com/JohnSmall/adk).
+**Phases 1-4 are COMPLETE.** The project lives at `/workspace/adk_ex/` (github.com/JohnSmall/adk_ex).
 
 ### What's Built
 
@@ -108,16 +108,16 @@ Phase 5: Plugins, MCP, Database Sessions — see `docs/implementation-plan.md`
 
 | Resource | Location |
 |----------|----------|
-| **This project (Elixir ADK)** | `/workspace/adk/` |
+| **This project (Elixir ADK)** | `/workspace/adk_ex/` |
 | **A2A protocol (separate package)** | `/workspace/a2a_ex/` |
 | **Google ADK Go source (PRIMARY ref)** | `/workspace/adk-go/` |
 | **Google ADK Python source** | `/workspace/google-adk-venv/lib/python3.13/site-packages/google/adk/` |
 | **A2A Go SDK** | `/workspace/a2a-go/` |
 | **A2A samples** | `/workspace/a2a-samples/` |
-| **PRD** | `/workspace/adk/docs/prd.md` |
-| **Architecture** | `/workspace/adk/docs/architecture.md` |
-| **Implementation plan** | `/workspace/adk/docs/implementation-plan.md` |
-| **This guide** | `/workspace/adk/docs/onboarding.md` |
+| **PRD** | `/workspace/adk_ex/docs/prd.md` |
+| **Architecture** | `/workspace/adk_ex/docs/architecture.md` |
+| **Implementation plan** | `/workspace/adk_ex/docs/implementation-plan.md` |
+| **This guide** | `/workspace/adk_ex/docs/onboarding.md` |
 
 ### External Documentation
 
@@ -264,6 +264,6 @@ mix clean && mix compile  # Clean build
 ## 8. Key Contacts / Context
 
 - **Project owner**: John Small (jds340@gmail.com)
-- **ADK Elixir project**: `/workspace/adk/` (github.com/JohnSmall/adk)
+- **ADK Elixir project**: `/workspace/adk_ex/` (github.com/JohnSmall/adk_ex)
 - **A2A Elixir project**: `/workspace/a2a_ex/` (github.com/JohnSmall/a2a_ex)
 - **Original AgentHub project**: `/workspace/agent_hub/` (predates ADK alignment)
