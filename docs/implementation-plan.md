@@ -2,14 +2,14 @@
 
 ## Document Info
 - **Project**: Elixir ADK
-- **Version**: 0.1.0
-- **Date**: 2026-02-07
+- **Version**: 0.3.0
+- **Date**: 2026-02-08
 
 ---
 
 ## Overview
 
-The implementation is organized into 6 phases, each building on the previous. Each phase produces a working, testable subset of functionality.
+The implementation is organized into 4 phases, each building on the previous. Each phase produces a working, testable subset of functionality. (A2A protocol is a separate package: `a2a_ex`.)
 
 ---
 
@@ -100,75 +100,71 @@ The implementation is organized into 6 phases, each building on the previous. Ea
 
 ---
 
-## Phase 3: Orchestration Agents
+## Phase 3: Orchestration Agents + Agent Transfer -- COMPLETE
 
-**Goal**: Implement Sequential, Parallel, and Loop workflow agents.
+**Goal**: Implement Sequential, Parallel, and Loop workflow agents, plus agent transfer.
 
 **Dependencies**: Phase 2
 
 ### Tasks
 
-- [ ] **3.1** Implement SequentialAgent (`lib/adk/agent/sequential_agent.ex`)
-- [ ] **3.2** Implement ParallelAgent (`lib/adk/agent/parallel_agent.ex`)
-  - Task.async_stream with branch isolation
-- [ ] **3.3** Implement LoopAgent (`lib/adk/agent/loop_agent.ex`)
-  - max_iterations, escalation-based termination
-- [ ] **3.4** Implement agent transfer mechanism in AutoFlow
-- [ ] **3.5** Integration tests for multi-agent workflows
+- [x] **3.1** Implement LoopAgent (`lib/adk/agent/loop_agent.ex`)
+  - Stream.resource + reduce_while, max_iterations, escalation-based termination
+  - State propagation between iterations
+- [x] **3.2** Implement SequentialAgent (`lib/adk/agent/sequential_agent.ex`)
+  - Thin LoopAgent wrapper with max_iterations=1 (matches Go ADK pattern)
+- [x] **3.3** Implement ParallelAgent (`lib/adk/agent/parallel_agent.ex`)
+  - Task.async + Task.await_many with branch isolation per sub-agent
+- [x] **3.4** Implement TransferToAgent tool (`lib/adk/tool/transfer_to_agent.ex`)
+  - Tool returning `%{"transfer_to_agent" => name}` in result
+- [x] **3.5** Implement AgentTransfer processor (`lib/adk/flow/processors/agent_transfer.ex`)
+  - Injects transfer tool into LlmRequest + target agent instructions
+  - maybe_set_transfer detects transfer result, maybe_run_transfer executes target agent
+- [x] **3.6** Integration tests for multi-agent workflows
+
+### Verification (all passing)
+- 168 tests, 0 failures (75 Phase 1 + 63 Phase 2 + 30 Phase 3)
+- 4 integration tests (Gemini + Claude, excluded by default)
+- Credo: no issues
+- Dialyzer: 0 errors
 
 ---
 
-## Phase 4: A2A Protocol
-
-**Goal**: Implement the Agent-to-Agent protocol for inter-agent HTTP communication.
-
-**Dependencies**: Phase 3
-
-### Tasks
-
-- [ ] **4.1** Implement AgentCard builder (`lib/adk/a2a/agent_card.ex`)
-- [ ] **4.2** Implement ADK <-> A2A converters (`lib/adk/a2a/converter.ex`)
-- [ ] **4.3** Implement A2A Server (`lib/adk/a2a/server.ex`) - Plug endpoint
-- [ ] **4.4** Implement A2A Client (`lib/adk/a2a/client.ex`)
-- [ ] **4.5** Implement RemoteA2aAgent (`lib/adk/agent/remote_agent.ex`)
-
----
-
-## Phase 5: Supporting Services
+## Phase 4: Supporting Services
 
 **Goal**: Memory, artifacts, plugins, MCP, and remaining features.
 
 **Dependencies**: Phase 3
 
+**Note**: A2A protocol implementation has been extracted to a separate package at `/workspace/a2a_ex/` (github.com/JohnSmall/a2a_ex).
+
 ### Tasks
 
-- [ ] **5.1** Implement Memory service behaviour + InMemoryMemoryService
-- [ ] **5.2** Implement Artifact service behaviour + InMemoryArtifactService
-- [ ] **5.3** Implement Plugin system (behaviour + chain execution)
-- [ ] **5.4** Implement MCP toolset integration
-- [ ] **5.5** Implement DatabaseSessionService (Ecto)
-- [ ] **5.6** Telemetry integration
+- [ ] **4.1** Implement Memory service behaviour + InMemoryMemoryService
+- [ ] **4.2** Implement Artifact service behaviour + InMemoryArtifactService
+- [ ] **4.3** Implement Plugin system (behaviour + chain execution)
+- [ ] **4.4** Implement MCP toolset integration
+- [ ] **4.5** Implement DatabaseSessionService (Ecto)
+- [ ] **4.6** Telemetry integration
 
 ---
 
 ## Dependency Graph
 
 ```
-Phase 1: Foundation          <-- COMPLETE
+Phase 1: Foundation                  <-- COMPLETE
     |
     v
-Phase 2: Runner + Tools + LLM Agent
+Phase 2: Runner + Tools + LLM Agent <-- COMPLETE
     |
     v
-Phase 3: Orchestration Agents
+Phase 3: Orchestration Agents       <-- COMPLETE
     |
-    +--------+---------+
-    |                  |
-    v                  v
-Phase 4: A2A     Phase 5: Supporting Services
+    v
+Phase 4: Supporting Services        <-- NEXT
 ```
 
-Phases 4 and 5 can be developed in parallel after Phase 3.
+Note: A2A protocol is a separate package (`a2a_ex`) that depends on this ADK package.
 
 ---
 
@@ -198,4 +194,4 @@ Phases 4 and 5 can be developed in parallel after Phase 3.
 | 2 | No Elixir GenAI SDK | Use Req + REST API directly; study Go SDK for patterns |
 | 2 | SSE parsing complexity | Study Go/Python implementations for chunked response handling |
 | 3 | Parallel agent state races | Use ETS with atomic operations; branch isolation |
-| 4 | A2A spec ambiguity | Reference Go A2A SDK at `/workspace/a2a-go/` |
+| 4 | Ecto dependency for DB sessions | Optional dependency; provide behaviour for custom backends |

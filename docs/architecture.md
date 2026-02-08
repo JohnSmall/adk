@@ -2,9 +2,9 @@
 
 ## Document Info
 - **Project**: Elixir ADK
-- **Version**: 0.2.0
-- **Date**: 2026-02-07
-- **Status**: Phase 2 Complete
+- **Version**: 0.3.0
+- **Date**: 2026-02-08
+- **Status**: Phases 1-3 Complete, Phase 4 (Services) Next
 
 ---
 
@@ -28,8 +28,8 @@ ADK.Runner.run/5
      |         |
      |         +--> ADK.Flow.run/2 (Stream.resource/3 loop)
      |         |         |
-     |         |         +--> Build LlmRequest via 4 processors:
-     |         |         |       Basic -> ToolProcessor -> Instructions -> Contents
+     |         |         +--> Build LlmRequest via 5 processors:
+     |         |         |       Basic -> ToolProcessor -> Instructions -> AgentTransfer -> Contents
      |         |         |
      |         |         +--> [before_model_callbacks] (may short-circuit)
      |         |         +--> Model.generate_content/3 (Gemini/Claude/Mock)
@@ -103,10 +103,16 @@ lib/adk/
     llm_agent.ex                     # LlmAgent (model, tools, instructions, callbacks, output_key)
   runner.ex                          # Runner (session lifecycle, event persistence, agent routing)
 
-  # === Phase 3: Orchestration (NEXT) ===
-  # agent/sequential_agent.ex        # Run sub-agents in order
-  # agent/parallel_agent.ex          # Run sub-agents concurrently (Task.async_stream)
-  # agent/loop_agent.ex              # Repeat until escalation/max_iterations
+  # === Phase 3: Orchestration ===
+  agent/
+    loop_agent.ex                    # Iterate sub-agents (max_iterations, escalation exit)
+    sequential_agent.ex              # LoopAgent wrapper (max_iterations=1)
+    parallel_agent.ex                # Task.async + Task.await_many, branch isolation
+  tool/
+    transfer_to_agent.ex             # Tool signaling agent transfer
+  flow/
+    processors/
+      agent_transfer.ex              # Injects transfer tool + target instructions
 ```
 
 ---
@@ -207,7 +213,8 @@ Each processor is a function `(InvocationContext, LlmRequest, flow_state) -> {:o
 1. **Basic** — Copies `agent.generate_content_config` into `request.config`
 2. **ToolProcessor** — Builds `request.tools` map and adds function declarations to config
 3. **Instructions** — Builds `system_instruction` from global + agent instruction; interpolates `{var}` from session state
-4. **Contents** — Builds conversation history from session events; filters by branch; converts foreign agent content to user perspective
+4. **AgentTransfer** — Injects transfer_to_agent tool + target agent instructions into request
+5. **Contents** — Builds conversation history from session events; filters by branch; converts foreign agent content to user perspective
 
 ---
 
@@ -244,15 +251,17 @@ Each processor is a function `(InvocationContext, LlmRequest, flow_state) -> {:o
 | Pydantic models | `defstruct` + `@type` | Plus `@enforce_keys` for required fields |
 | Tool execution | `tool.__struct__.run(tool, ctx, args)` | Dynamic dispatch via struct module |
 | Model execution | `model.__struct__.generate_content(model, req, stream)` | Same pattern |
-| Parallel agents (Phase 3) | `Task.async_stream` | With branch isolation per sub-agent |
+| ParallelAgent concurrency | `Task.async` + `Task.await_many` | Branch isolation per sub-agent |
+| SequentialAgent reuse | LoopAgent(max_iterations=1) | Matches Go ADK pattern |
 
 ---
 
 ## 9. Testing Strategy
 
-### Unit Tests (138 passing)
+### Unit Tests (168 passing)
 - **Phase 1 (75)**: Types, Event, Session/State/InMemory, Agent/CustomAgent/Tree
 - **Phase 2 (63)**: LlmRequest, LlmResponse, Mock, FunctionTool, ToolContext, Instructions processor, Contents processor, Flow (7 tests), LlmAgent (6 tests), Runner (6 tests)
+- **Phase 3 (30)**: LoopAgent, SequentialAgent, ParallelAgent, TransferToAgent, AgentTransfer processor, multi-agent integration
 
 ### Integration Tests (4, excluded by default)
 - `test/integration/gemini_test.exs` — Requires `GEMINI_API_KEY`
