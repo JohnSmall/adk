@@ -8,7 +8,7 @@ defmodule ADK.MixProject do
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      dialyzer: [plt_add_apps: [:mix, :ex_unit]]
+      dialyzer: [plt_add_apps: [:mix, :ex_unit, :opentelemetry_api]]
     ]
   end
 
@@ -26,7 +26,10 @@ defmodule ADK.MixProject do
       {:req, "~> 0.5"},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:opentelemetry_api, "~> 1.4"},
+      {:opentelemetry, "~> 1.5", only: [:dev, :test], runtime: false},
+      {:telemetry, "~> 1.3"}
     ]
   end
 end

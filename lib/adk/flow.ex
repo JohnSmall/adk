@@ -158,7 +158,18 @@ defmodule ADK.Flow do
 
       {:continue, updated_cb_ctx} ->
         stream? = ctx.run_config.streaming_mode != :none
-        responses = flow.model |> Model.generate_content(request, stream?) |> Enum.to_list()
+
+        llm_meta = %{
+          model_name: model_name(flow),
+          invocation_id: ctx.invocation_id,
+          session_id: if(ctx.session, do: ctx.session.id, else: nil)
+        }
+
+        responses =
+          ADK.Telemetry.span_llm_call(llm_meta, fn ->
+            flow.model |> Model.generate_content(request, stream?) |> Enum.to_list()
+          end)
+
         final_response = find_final_response(responses)
 
         case run_after_model_callbacks(flow.after_model_callbacks, updated_cb_ctx, final_response) do
@@ -260,6 +271,8 @@ defmodule ADK.Flow do
         actions: merged_actions
       )
 
+    ADK.Telemetry.span_merged_tools(%{event_id: event.id})
+
     {:ok, event}
   end
 
@@ -293,7 +306,17 @@ defmodule ADK.Flow do
   end
 
   defp execute_and_finalize(flow, tool_ctx, tool, fc) do
-    case Tool.run(tool, tool_ctx, fc.args) do
+    tool_meta = %{
+      tool_name: Tool.name(tool),
+      function_call_id: fc.id
+    }
+
+    result =
+      ADK.Telemetry.span_tool_call(tool_meta, fn ->
+        Tool.run(tool, tool_ctx, fc.args)
+      end)
+
+    case result do
       {:ok, result} ->
         finalize_tool_success(flow, tool_ctx, tool, fc, result)
 

@@ -17,8 +17,8 @@ defmodule ADK.Runner do
           app_name: String.t(),
           root_agent: struct(),
           session_service: GenServer.server(),
-          artifact_service: term(),
-          memory_service: term(),
+          artifact_service: GenServer.server() | nil,
+          memory_service: GenServer.server() | nil,
           parent_map: %{String.t() => struct()}
         }
 

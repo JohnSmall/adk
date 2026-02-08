@@ -2,9 +2,9 @@
 
 ## Document Info
 - **Project**: Elixir ADK - An Elixir/OTP port of Google's Agent Development Kit
-- **Version**: 0.3.0
-- **Date**: 2026-02-07
-- **Status**: Phases 1-3 Complete, Phase 4 (Services) Next
+- **Version**: 0.4.0
+- **Date**: 2026-02-08
+- **Status**: Phases 1-4 Complete, Phase 5 (Plugins, MCP, DB Sessions) Next
 - **GitHub**: github.com/JohnSmall/adk
 
 ---
@@ -107,10 +107,13 @@ User Message -> Runner -> Agent -> Flow -> LLM
 | Parallel Agent | `ADK.Agent.ParallelAgent` | Done (Phase 3) |
 | Transfer-to-Agent tool | `ADK.Tool.TransferToAgent` | Done (Phase 3) |
 | Agent Transfer processor | `ADK.Flow.Processors.AgentTransfer` | Done (Phase 3) |
-| Memory service | `ADK.Memory.*` | Phase 4 |
-| Artifact service | `ADK.Artifact.*` | Phase 4 |
-| Database session service | `ADK.Session.Database` | Phase 4 |
-| Plugin system | `ADK.Plugin` | Phase 4 |
+| Memory service | `ADK.Memory.*` | Done (Phase 4) |
+| Artifact service | `ADK.Artifact.*` | Done (Phase 4) |
+| LoadMemory tool | `ADK.Tool.LoadMemory` | Done (Phase 4) |
+| LoadArtifacts tool | `ADK.Tool.LoadArtifacts` | Done (Phase 4) |
+| Telemetry (OTel + :telemetry) | `ADK.Telemetry` | Done (Phase 4) |
+| Database session service | `ADK.Session.Database` | Phase 5 |
+| Plugin system | `ADK.Plugin` | Phase 5 |
 
 ### Key Design Decisions
 

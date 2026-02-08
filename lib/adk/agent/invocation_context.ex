@@ -15,8 +15,8 @@ defmodule ADK.Agent.InvocationContext do
           run_config: ADK.RunConfig.t(),
           ended: boolean(),
           session_service: GenServer.server() | nil,
-          artifact_service: term(),
-          memory_service: term(),
+          artifact_service: GenServer.server() | nil,
+          memory_service: GenServer.server() | nil,
           parent_map: %{String.t() => struct()},
           root_agent: struct() | nil
         }

@@ -18,7 +18,7 @@ Google provides the ADK in Python (reference), TypeScript, Go, and Java. We are 
 
 ## 2. Current Status
 
-**Phases 1-3 are COMPLETE.** The project lives at `/workspace/adk/` (github.com/JohnSmall/adk).
+**Phases 1-4 are COMPLETE.** The project lives at `/workspace/adk/` (github.com/JohnSmall/adk).
 
 ### What's Built
 
@@ -78,14 +78,27 @@ Google provides the ADK in Python (reference), TypeScript, Go, and Java. We are 
 | `ADK.Tool.TransferToAgent` | Tool signaling agent transfer | `lib/adk/tool/transfer_to_agent.ex` |
 | `ADK.Flow.Processors.AgentTransfer` | Injects transfer tool + target instructions | `lib/adk/flow/processors/agent_transfer.ex` |
 
+#### Phase 4: Memory, Artifacts, and Telemetry (+49 tests = 217 total)
+
+| Module | Purpose | File |
+|--------|---------|------|
+| `ADK.Memory.Entry` | Memory entry struct (content, author, timestamp) | `lib/adk/memory/entry.ex` |
+| `ADK.Memory.Service` | Behaviour: add_session/2, search/2 | `lib/adk/memory/service.ex` |
+| `ADK.Memory.InMemory` | GenServer + ETS, word-based search | `lib/adk/memory/in_memory.ex` |
+| `ADK.Artifact.Service` | Behaviour: save, load, delete, list, versions | `lib/adk/artifact/service.ex` |
+| `ADK.Artifact.InMemory` | GenServer + ETS, versioned storage, user-scoped | `lib/adk/artifact/in_memory.ex` |
+| `ADK.Tool.LoadMemory` | Tool: searches memory via context | `lib/adk/tool/load_memory.ex` |
+| `ADK.Tool.LoadArtifacts` | Tool: loads artifacts by name | `lib/adk/tool/load_artifacts.ex` |
+| `ADK.Telemetry` | Dual: OpenTelemetry spans + :telemetry events | `lib/adk/telemetry.ex` |
+
 ### Test Coverage
-- 168 tests passing (75 + 63 + 30)
+- 217 tests passing (75 + 63 + 30 + 49)
 - 4 integration tests (Gemini + Claude, excluded by default)
 - Credo: clean
 - Dialyzer: clean
 
 ### What's Next
-Phase 4: Supporting Services (memory, artifacts, database sessions, plugins) — see `docs/implementation-plan.md`
+Phase 5: Plugins, MCP, Database Sessions — see `docs/implementation-plan.md`
 
 ---
 
@@ -216,7 +229,7 @@ All callbacks return `{value | nil, updated_context}`. Nil = continue, non-nil =
 ### Running Tests
 ```bash
 cd /workspace/adk
-mix test                                        # Run all unit tests (168)
+mix test                                        # Run all unit tests (217)
 mix test test/integration/ --include integration # Run integration tests
 mix test --trace                                 # Run with verbose output
 mix credo                                        # Static analysis

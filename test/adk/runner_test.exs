@@ -163,6 +163,31 @@ defmodule ADK.RunnerTest do
     assert session.id == "auto-session"
   end
 
+  test "services pass through to runner struct", ctx do
+    mem_name = :"runner_mem_#{:erlang.unique_integer([:positive])}"
+    mem_prefix = :"runner_memp_#{:erlang.unique_integer([:positive])}"
+    {:ok, mem} = ADK.Memory.InMemory.start_link(name: mem_name, table_prefix: mem_prefix)
+
+    art_name = :"runner_art_#{:erlang.unique_integer([:positive])}"
+    art_prefix = :"runner_artp_#{:erlang.unique_integer([:positive])}"
+    {:ok, art} = ADK.Artifact.InMemory.start_link(name: art_name, table_prefix: art_prefix)
+
+    model = Mock.new(responses: [%LlmResponse{content: Content.new_from_text("model", "ok"), turn_complete: true}])
+    agent = %LlmAgent{name: "svc-agent", model: model}
+
+    {:ok, runner} =
+      Runner.new(
+        app_name: "test-app",
+        root_agent: agent,
+        session_service: ctx[:session_service],
+        memory_service: mem,
+        artifact_service: art
+      )
+
+    assert runner.memory_service == mem
+    assert runner.artifact_service == art
+  end
+
   test "duplicate agent names rejected" do
     inner = %LlmAgent{name: "dup", model: Mock.new()}
     outer = %LlmAgent{name: "dup", model: Mock.new(), sub_agents: [inner]}

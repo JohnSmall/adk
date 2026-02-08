@@ -8,6 +8,7 @@ defmodule ADK.Agent.CallbackContext do
 
   alias ADK.Agent.InvocationContext
   alias ADK.Event.Actions
+  alias ADK.Memory.InMemory, as: MemoryService
 
   @type t :: %__MODULE__{
           invocation_context: InvocationContext.t(),
@@ -65,5 +66,23 @@ defmodule ADK.Agent.CallbackContext do
   def set_state(%__MODULE__{actions: actions} = cb_ctx, key, value) do
     new_delta = Map.put(actions.state_delta, key, value)
     %{cb_ctx | actions: %{actions | state_delta: new_delta}}
+  end
+
+  @doc """
+  Searches memory for entries matching the query.
+
+  Returns `{:ok, [Entry.t()]}` or `{:ok, []}` if no memory service is configured.
+  """
+  @spec search_memory(t(), String.t()) :: {:ok, [ADK.Memory.Entry.t()]}
+  def search_memory(%__MODULE__{invocation_context: ctx}, query) do
+    if ctx.memory_service do
+      MemoryService.search(ctx.memory_service,
+        query: query,
+        app_name: ctx.session.app_name,
+        user_id: ctx.session.user_id
+      )
+    else
+      {:ok, []}
+    end
   end
 end

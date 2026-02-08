@@ -11,7 +11,7 @@ Elixir/OTP port of Google's Agent Development Kit (ADK). Standalone `adk` hex pa
 ```bash
 cd /workspace/adk
 mix deps.get
-mix test          # 168 tests
+mix test          # 217 tests
 mix credo         # Static analysis
 mix dialyzer      # Type checking
 ```
@@ -31,14 +31,15 @@ mix dialyzer      # Type checking
 
 ## Current Status
 
-**Phases 1-3 COMPLETE (168 tests, credo clean, dialyzer clean).**
+**Phases 1-4 COMPLETE (217 tests, credo clean, dialyzer clean).**
 
 | Phase | Status | Tests |
 |-------|--------|-------|
 | Phase 1: Foundation (Types, Event, Session, Agent) | Done | 75 |
 | Phase 2: Runner + Tools + LLM Agent (Model, Flow) | Done | +63 = 138 |
 | Phase 3: Orchestration (Loop/Sequential/Parallel, Transfer) | Done | +30 = 168 |
-| Phase 4: Services (Memory, Artifacts, DB Sessions, Plugins) | Next | — |
+| Phase 4: Memory, Artifacts, Telemetry | Done | +49 = 217 |
+| Phase 5: Plugins, MCP, Database Sessions | Next | — |
 
 ## Module Map
 
@@ -69,6 +70,14 @@ mix dialyzer      # Type checking
 - `ADK.Agent.ParallelAgent` — Task.async + Task.await_many, branch isolation
 - `ADK.Tool.TransferToAgent` — Tool signaling agent transfer
 - `ADK.Flow.Processors.AgentTransfer` — Injects transfer tool + target instructions
+
+### Services (Phase 4)
+- `ADK.Memory.Entry` — Memory entry struct (content, author, timestamp)
+- `ADK.Memory.Service` + `ADK.Memory.InMemory` — Memory behaviour + GenServer/ETS impl
+- `ADK.Artifact.Service` + `ADK.Artifact.InMemory` — Artifact behaviour + versioned GenServer/ETS impl
+- `ADK.Tool.LoadMemory` — Tool: searches memory via context
+- `ADK.Tool.LoadArtifacts` — Tool: loads artifacts by name
+- `ADK.Telemetry` — Dual telemetry: OpenTelemetry spans + Elixir :telemetry events
 
 ## Critical Rules
 

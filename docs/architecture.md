@@ -2,9 +2,9 @@
 
 ## Document Info
 - **Project**: Elixir ADK
-- **Version**: 0.3.0
+- **Version**: 0.4.0
 - **Date**: 2026-02-08
-- **Status**: Phases 1-3 Complete, Phase 4 (Services) Next
+- **Status**: Phases 1-4 Complete, Phase 5 (Plugins, MCP, DB Sessions) Next
 
 ---
 
@@ -113,6 +113,19 @@ lib/adk/
   flow/
     processors/
       agent_transfer.ex              # Injects transfer tool + target instructions
+
+  # === Phase 4: Services ===
+  memory/
+    entry.ex                         # Memory.Entry struct (content, author, timestamp)
+    service.ex                       # Memory.Service behaviour (add_session, search)
+    in_memory.ex                     # GenServer + ETS, word-based search
+  artifact/
+    service.ex                       # Artifact.Service behaviour (save, load, delete, list, versions)
+    in_memory.ex                     # GenServer + ETS, versioned storage, user-scoped
+  tool/
+    load_memory.ex                   # LoadMemory tool (searches memory via context)
+    load_artifacts.ex                # LoadArtifacts tool (loads artifacts by name)
+  telemetry.ex                       # Dual telemetry: OTel spans + :telemetry events
 ```
 
 ---
@@ -258,10 +271,11 @@ Each processor is a function `(InvocationContext, LlmRequest, flow_state) -> {:o
 
 ## 9. Testing Strategy
 
-### Unit Tests (168 passing)
+### Unit Tests (217 passing)
 - **Phase 1 (75)**: Types, Event, Session/State/InMemory, Agent/CustomAgent/Tree
 - **Phase 2 (63)**: LlmRequest, LlmResponse, Mock, FunctionTool, ToolContext, Instructions processor, Contents processor, Flow (7 tests), LlmAgent (6 tests), Runner (6 tests)
 - **Phase 3 (30)**: LoopAgent, SequentialAgent, ParallelAgent, TransferToAgent, AgentTransfer processor, multi-agent integration
+- **Phase 4 (49)**: Memory InMemory (10), Artifact InMemory (17), Context helpers (7), LoadMemory (4), LoadArtifacts (4), Telemetry (7)
 
 ### Integration Tests (4, excluded by default)
 - `test/integration/gemini_test.exs` — Requires `GEMINI_API_KEY`

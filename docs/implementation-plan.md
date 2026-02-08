@@ -2,14 +2,14 @@
 
 ## Document Info
 - **Project**: Elixir ADK
-- **Version**: 0.3.0
+- **Version**: 0.4.0
 - **Date**: 2026-02-08
 
 ---
 
 ## Overview
 
-The implementation is organized into 4 phases, each building on the previous. Each phase produces a working, testable subset of functionality. (A2A protocol is a separate package: `a2a_ex`.)
+The implementation is organized into 5 phases, each building on the previous. Each phase produces a working, testable subset of functionality. (A2A protocol is a separate package: `a2a_ex`.)
 
 ---
 
@@ -130,9 +130,9 @@ The implementation is organized into 4 phases, each building on the previous. Ea
 
 ---
 
-## Phase 4: Supporting Services
+## Phase 4: Memory, Artifacts, and Telemetry -- COMPLETE
 
-**Goal**: Memory, artifacts, plugins, MCP, and remaining features.
+**Goal**: Memory service, artifact service, and OpenTelemetry-based observability.
 
 **Dependencies**: Phase 3
 
@@ -140,28 +140,64 @@ The implementation is organized into 4 phases, each building on the previous. Ea
 
 ### Tasks
 
-- [ ] **4.1** Implement Memory service behaviour + InMemoryMemoryService
-- [ ] **4.2** Implement Artifact service behaviour + InMemoryArtifactService
-- [ ] **4.3** Implement Plugin system (behaviour + chain execution)
-- [ ] **4.4** Implement MCP toolset integration
-- [ ] **4.5** Implement DatabaseSessionService (Ecto)
-- [ ] **4.6** Telemetry integration
+- [x] **4.1** Implement Memory service behaviour + InMemory implementation
+  - `ADK.Memory.Entry` — Entry struct (content, author, timestamp)
+  - `ADK.Memory.Service` — Behaviour: add_session/2, search/2
+  - `ADK.Memory.InMemory` — GenServer + ETS, word-based search
+- [x] **4.2** Implement Artifact service behaviour + InMemory implementation
+  - `ADK.Artifact.Service` — Behaviour: save, load, delete, list, versions
+  - `ADK.Artifact.InMemory` — GenServer + ETS, versioned storage, user-scoped artifacts
+- [x] **4.3** Wire services into contexts + add helper methods
+  - Updated `InvocationContext` and `Runner` types: `term()` → `GenServer.server() | nil`
+  - `CallbackContext.search_memory/2` — delegates to memory service
+  - `ToolContext.search_memory/2`, `save_artifact/3`, `load_artifact/2-3`, `list_artifacts/1`
+  - `save_artifact` tracks changes in `actions.artifact_delta`
+- [x] **4.4** Implement LoadMemory + LoadArtifacts tools
+  - `ADK.Tool.LoadMemory` — searches memory via context, returns formatted results
+  - `ADK.Tool.LoadArtifacts` — loads artifacts by name, returns content
+- [x] **4.5** Implement Telemetry (OpenTelemetry spans + Elixir :telemetry events)
+  - `ADK.Telemetry` — dual emission: OTel spans + :telemetry events
+  - Instrumented `ADK.Flow`: model calls, tool calls, merged tools
+  - Added deps: `opentelemetry_api ~> 1.4`, `opentelemetry ~> 1.5` (dev/test), `telemetry ~> 1.3`
+
+### Verification (all passing)
+- 217 tests, 0 failures (168 Phase 1-3 + 49 Phase 4)
+- 4 integration tests (Gemini + Claude, excluded by default)
+- Credo: no issues
+- Dialyzer: 0 errors
+
+---
+
+## Phase 5: Plugins, MCP, and Database Sessions
+
+**Goal**: Plugin system, MCP toolset integration, and persistent session storage.
+
+**Dependencies**: Phase 4
+
+### Tasks
+
+- [ ] **5.1** Implement Plugin system (behaviour + chain execution)
+- [ ] **5.2** Implement MCP toolset integration
+- [ ] **5.3** Implement DatabaseSessionService (Ecto)
 
 ---
 
 ## Dependency Graph
 
 ```
-Phase 1: Foundation                  <-- COMPLETE
+Phase 1: Foundation                        <-- COMPLETE
     |
     v
-Phase 2: Runner + Tools + LLM Agent <-- COMPLETE
+Phase 2: Runner + Tools + LLM Agent       <-- COMPLETE
     |
     v
-Phase 3: Orchestration Agents       <-- COMPLETE
+Phase 3: Orchestration Agents             <-- COMPLETE
     |
     v
-Phase 4: Supporting Services        <-- NEXT
+Phase 4: Memory, Artifacts, Telemetry     <-- COMPLETE
+    |
+    v
+Phase 5: Plugins, MCP, Database Sessions
 ```
 
 Note: A2A protocol is a separate package (`a2a_ex`) that depends on this ADK package.
@@ -183,6 +219,9 @@ Note: A2A protocol is a separate package (`a2a_ex`) that depends on this ADK pac
 | LLM Agent | `/workspace/adk-go/agent/llm_agent.go` |
 | Flow | `/workspace/adk-go/agent/flow.go` |
 | Tool interface | `/workspace/adk-go/tool/tool.go` |
+| Memory service | `/workspace/adk-go/memory/service.go` |
+| Artifact service | `/workspace/adk-go/artifact/service.go` |
+| Telemetry | `/workspace/adk-go/internal/telemetry/telemetry.go` |
 | A2A server | `/workspace/adk-go/server/adka2a/` |
 
 ---
@@ -194,4 +233,5 @@ Note: A2A protocol is a separate package (`a2a_ex`) that depends on this ADK pac
 | 2 | No Elixir GenAI SDK | Use Req + REST API directly; study Go SDK for patterns |
 | 2 | SSE parsing complexity | Study Go/Python implementations for chunked response handling |
 | 3 | Parallel agent state races | Use ETS with atomic operations; branch isolation |
-| 4 | Ecto dependency for DB sessions | Optional dependency; provide behaviour for custom backends |
+| 4 | OpenTelemetry dep weight | opentelemetry_api is lightweight; full SDK optional for users |
+| 5 | Ecto dependency for DB sessions | Optional dependency; provide behaviour for custom backends |
