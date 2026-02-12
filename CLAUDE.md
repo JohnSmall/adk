@@ -104,7 +104,7 @@ mix dialyzer      # Type checking
 7. **All tests async**: Use `async: true` unless shared state requires otherwise
 8. **Verify all changes**: Always run `mix test && mix credo && mix dialyzer`
 9. **Telemetry events**: Use `[:adk_ex, ...]` prefix (not `[:adk, ...]`) — renamed with hex package
-10. **OTel span testing**: Span name is `elem(span, 6)` (not 2). Must restart `:opentelemetry` app with proper processor config.
+10. **OTel span testing**: `config/test.exs` configures `otel_simple_processor`. Call `:otel_simple_processor.set_exporter(:otel_exporter_pid, self())` in test setup. Span name is `elem(span, 6)` (not 2). No app restart needed.
 11. **Dialyzer unreachable branches**: If return type is always `{:ok, _}`, don't match `{:error, _}`
 12. **FunctionTool field**: Use `handler:` not `function:` in `FunctionTool.new/1`
 13. **Plugin nil safety**: All `Plugin.Manager.run_*` functions accept `nil` as first arg — no nil checks needed at call sites

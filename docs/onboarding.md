@@ -265,7 +265,7 @@ All callbacks return `{value | nil, updated_context}`. Nil = continue, non-nil =
 4. **Mock model**: Use `Mock.new(responses: [...])` NOT bare `%Mock{}` — needs Agent process for state
 5. **Behaviour dispatch**: `ADK.Agent` has NO module functions — call `agent.__struct__.run(agent, ctx)` or the implementing module directly
 6. **Test module names**: Use unique names to avoid cross-file collisions
-7. **OTel span testing**: Use `otel_simple_processor.set_exporter(:otel_exporter_pid, self())` in setup. Span name is at `elem(span, 6)` (not 2) in the Erlang span record. Must restart opentelemetry app with proper processor config.
+7. **OTel span testing**: `config/test.exs` configures `otel_simple_processor`. In test setup, call `:otel_simple_processor.set_exporter(:otel_exporter_pid, self())` to route spans to the test process. Span name is at `elem(span, 6)` (not 2) in the Erlang span record. No app restart needed.
 8. **Dialyzer unreachable branches**: If a function always returns `{:ok, _}`, don't pattern match `{:error, _}` — dialyzer flags it
 9. **FunctionTool field**: Use `handler:` not `function:` in `FunctionTool.new/1`
 10. **Plugin nil safety**: All `Plugin.Manager.run_*` functions accept `nil` as first arg — no nil checks needed at call sites
